@@ -8,18 +8,33 @@
  */
 class Rest
 {
+    const OUTPUT_RAW = 0;       // original unmodified output (as string)
+    const OUTPUT_RECOGNIZE = 1; // automatic recognition of output
+    const OUTPUT_JSON = 2;      // if JSON output as stdClass
+    const OUTPUT_XML = 3;       // if XML output as SimpleXMLElement
+    
+    
+    
     /**
      * @var HttpRequest
      */
     private $request;
     
+    /**
+     * @var int self-constant
+     */
+    private $output;
+    
     
     
     /**
-     * @param string $url
+     * @param string $url   the target or base url
+     * @param int $output   a self-constant OUTPUT_...
      */
-    public function __construct($url)
+    public function __construct($url, $output=self::OUTPUT_RECOGNIZE)
     {
+        $this->output = $output;
+        
         $this->request = new HttpRequest($url);
         
         $options = array(
@@ -32,6 +47,7 @@ class Rest
     /**
      * @param string $path
      * @param mixed $dataIn
+     * @return mixed
      */
     public function get($path='', $dataIn=null)
     {
@@ -41,6 +57,7 @@ class Rest
     /**
      * @param string $path
      * @param array $dataIn
+     * @return mixed
      */
     public function post($path='', array $dataIn=null)
     {
@@ -50,6 +67,7 @@ class Rest
     /**
      * @param string $path
      * @param string|array $dataIn
+     * @return mixed
      */
     public function put($path='', $dataIn=null)
     {
@@ -63,6 +81,7 @@ class Rest
     
     /**
      * @param string $path
+     * @return mixed
      */
     public function delete($path='')
     {
@@ -71,6 +90,9 @@ class Rest
     
     
     
+    /**
+     * @return mixed
+     */
     private function _fetch($method, $path, $callback, $dataIn, HttpRequest $request=null)
     {
         if (!isset($request)) $request = clone $this->request;
@@ -79,9 +101,50 @@ class Rest
         if (isset($callback)) $request->$callback($dataIn);
         $request->send();
         
-        return $request->getResponseBody();
+        if ($this->output === self::OUTPUT_RAW)
+        {
+            return $request->getResponseBody();
+        }
+        else
+        {
+            $body = $request->getResponseBody();
+            $bodyTrim = trim($body);
+            
+            /* JSON */
+            if ($this->output === self::OUTPUT_RECOGNIZE || $this->output === self::OUTPUT_JSON)
+            {
+                if (isset($bodyTrim{0}) && $bodyTrim{0} === '{')
+                {
+                    $return = json_decode($bodyTrim);
+                    if (json_last_error() === JSON_ERROR_NONE)
+                        return $return;
+                }
+            }
+            
+            /* XML */
+            if ($this->output === self::OUTPUT_RECOGNIZE || $this->output === self::OUTPUT_XML)
+            {
+                if (isset($bodyTrim{0}) && $bodyTrim{0} === '<')
+                {
+                    try
+                    {
+                        libxml_use_internal_errors(true);
+                        return new SimpleXMLElement($bodyTrim);
+                    }
+                    catch (Exception $e)
+                    {
+                        libxml_clear_errors();
+                    }
+                }
+            }
+            
+            return $body;
+        }
     }
     
+    /**
+     * @return string
+     */
     private function _finalUrl(HttpRequest $request, $path)
     {
         $url = $request->getUrl();
