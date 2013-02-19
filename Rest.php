@@ -20,6 +20,11 @@ class Rest
     private $request;
     
     /**
+     * @var array
+     */
+    private $query;
+    
+    /**
      * @var boolean
      */
     private $isRawOutput;
@@ -39,13 +44,16 @@ class Rest
     
     /**
      * @param string $url   the target or base url
+     * @param mixed $query  query data for URL
      * @param boolean $isRawOutput   if FALSE for JSON output is stdClass and for XML output is SimpleXMLElement
      */
-    public function __construct($url, $isRawOutput=false)
+    public function __construct($url, $query=null, $isRawOutput=false)
     {
+        $this->query = (array) $query;
         $this->isRawOutput = $isRawOutput;
         
         $this->request = new HttpRequest($url);
+        $this->request->addQueryData($this->query);
         
         $options = array(
             'redirect' => 10, // stop after 10 redirects
@@ -65,14 +73,19 @@ class Rest
      */
     public function get($path='', $dataIn=null, $isApc=true)
     {
+        $dataIn = (array) $dataIn;
+        
         $request = clone $this->request;
         
         if ($isApc && $this->isApc)
         {
+            $query = array_merge($dataIn, $this->query);
+            ksort($query);
+            
             $apcKey =
                 $this->apcPrefix
                 .$this->_finalUrl($request, $path)
-                .'?'.http_build_query((array)$dataIn, null, '&')
+                .'?'.http_build_query($query, null, '&')
                 //.crc32(serialize($this))
                 ;
             
@@ -84,7 +97,7 @@ class Rest
         else
             $apcKey = null;
         
-        return $this->_fetch(HTTP_METH_GET, $path, 'setQueryData', $dataIn, $request, $apcKey);
+        return $this->_fetch(HTTP_METH_GET, $path, 'addQueryData', $dataIn, $request, $apcKey);
     }
     
     /**
